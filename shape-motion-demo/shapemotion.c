@@ -13,9 +13,10 @@
 #include <p2switches.h>
 #include <shape.h>
 #include <abCircle.h>
+#include "buzzer.h"
 
 #define GREEN_LED BIT6
-
+#define RED_LED BIT0
 
 AbRect rect10 = {abRectGetBounds, abRectCheck, {10,10}}; /**< 10x10 rectangle */
 AbRArrow rightArrow = {abRArrowGetBounds, abRArrowCheck, 30};
@@ -29,7 +30,7 @@ Layer layer4 = {
   (AbShape *)&rightArrow,
   {(screenWidth/2)+10, (screenHeight/2)+5}, /**< bit below & right of center */
   {0,0}, {0,0},				    /* last & next pos */
-  COLOR_PINK,
+  COLOR_BLACK,
   0
 };
   
@@ -55,7 +56,7 @@ Layer layer1 = {		/**< Layer with a red square */
   (AbShape *)&rect10,
   {screenWidth/2, screenHeight/2}, /**< center */
   {0,0}, {0,0},				    /* last & next pos */
-  COLOR_RED,
+  COLOR_ORANGE,
   &fieldLayer,
 };
 
@@ -63,7 +64,7 @@ Layer layer0 = {		/**< Layer with an orange circle */
   (AbShape *)&circle14,
   {(screenWidth/2)+10, (screenHeight/2)+5}, /**< bit below & right of center */
   {0,0}, {0,0},				    /* last & next pos */
-  COLOR_ORANGE,
+  COLOR_RED,
   &layer1,
 };
 
@@ -148,7 +149,7 @@ void mlAdvance(MovLayer *ml, Region *fence)
 }
 
 
-u_int bgColor = COLOR_BLUE;     /**< The background color */
+u_int bgColor = COLOR_YELLOW;     /**< The background color */
 int redrawScreen = 1;           /**< Boolean for whether screen needs to be redrawn */
 
 Region fieldFence;		/**< fence around playing field  */
@@ -159,14 +160,14 @@ Region fieldFence;		/**< fence around playing field  */
  */
 void main()
 {
-  P1DIR |= GREEN_LED;		/**< Green led on when CPU on */		
-  P1OUT |= GREEN_LED;
-
+  P1DIR |= GREEN_LED, RED_LED;		/**< Green led on when CPU on */		
+  P1OUT = GREEN_LED;
+  
   configureClocks();
   lcd_init();
   shapeInit();
   p2sw_init(1);
-
+  buzzer_init();
   shapeInit();
 
   layerInit(&layer0);
@@ -178,22 +179,27 @@ void main()
 
   enableWDTInterrupts();      /**< enable periodic interrupt */
   or_sr(0x8);	              /**< GIE (enable interrupts) */
-
+  buzzer_set_period(1000);
 
   for(;;) { 
     while (!redrawScreen) { /**< Pause CPU if screen doesn't need updating */
-      P1OUT &= ~GREEN_LED;    /**< Green led off witHo CPU */
-      or_sr(0x10);	      /**< CPU OFF */
+      P1OUT = RED_LED; /**< RED led on witHo CPU */
+      P1OUT &= ~GREEN_LED;
+      buzzerOff();
+      or_sr(0x10); /**< CPU OFF */
     }
-    P1OUT |= GREEN_LED;       /**< Green led on when CPU on */
+    P1OUT = GREEN_LED;       /**< Green led on when CPU on */
     redrawScreen = 0;
+    buzzer_set_period(1000);
     movLayerDraw(&ml0, &layer0);
+    drawString5x7(20,20,"Got Interrupts?", COLOR_BLACK, COLOR_GREEN);
   }
 }
 
 /** Watchdog timer interrupt handler. 15 interrupts/sec */
 void wdt_c_handler()
 {
+ 
   static short count = 0;
   P1OUT |= GREEN_LED;		      /**< Green LED on when cpu on */
   count ++;
@@ -201,7 +207,8 @@ void wdt_c_handler()
     mlAdvance(&ml0, &fieldFence);
     if (p2sw_read())
       redrawScreen = 1;
-    count = 0;
+      count = 0;
+      
   } 
-  P1OUT &= ~GREEN_LED;		    /**< Green LED off when cpu off */
+  P1OUT &= ~GREEN_LED; /**< Green LED off when cpu off */
 }
